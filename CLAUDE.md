@@ -4,6 +4,109 @@ This file provides guidance for AI assistants (Claude and others) working in thi
 
 ---
 
+## プロジェクト概要
+
+感性タイプ診断サイト。15問の質問からE/N/Iの3軸スコアを計算し、8タイプのうち1つに分類する。
+診断は無料。有料レポート（PDF自動生成・メール配信）でマネタイズする。
+
+**SNS:** [@sense_profiling](https://www.instagram.com/sense_profiling/)（Instagram）
+
+---
+
+## 技術スタック
+
+| 要素 | 内容 |
+|------|------|
+| フレームワーク | React 18（CDN + Babel） / Next.js移行検討中 |
+| スタイリング | Tailwind CSS（CDN） |
+| DB | Supabase（PostgreSQL） |
+| 決済 | Stripe |
+| AI生成 | Claude API（anthropic） |
+| ホスティング | 現状: 静的HTML / 将来: Vercel想定 |
+
+---
+
+## Supabaseテーブル構成
+
+```sql
+-- 診断結果
+diagnostic_results (
+  id           uuid PRIMARY KEY,
+  user_id      uuid REFERENCES users(id),
+  browser_id   text,
+  type_key     text,   -- 例: "CID", "ENI"
+  type_name    text,   -- 例: "ダークウッド"
+  score_e      numeric,
+  score_n      numeric,
+  score_i      numeric,
+  result_json  jsonb,
+  answers      jsonb,
+  session_id   text,
+  created_at   timestamptz DEFAULT now()
+)
+
+-- ユーザー（メール任意）
+users (
+  id        uuid PRIMARY KEY,
+  email     text UNIQUE,
+  created_at timestamptz DEFAULT now()
+)
+
+-- ver.2で追加予定
+purchases (
+  id           uuid PRIMARY KEY,
+  result_id    uuid REFERENCES diagnostic_results(id),
+  user_id      uuid REFERENCES users(id),
+  stripe_session_id text,
+  amount       integer,
+  status       text,  -- "pending" | "completed" | "failed"
+  pdf_sent_at  timestamptz,
+  created_at   timestamptz DEFAULT now()
+)
+```
+
+---
+
+## タイプシステム
+
+### スコア軸
+
+- **E軸**（活動性）: 穏やか ←→ 活動的
+- **N軸**（感受性）: 大胆 ←→ 繊細
+- **I軸**（判断軸）: 思慮深い ←→ 直感的
+
+### タイプキーとタイプ名のマッピング
+
+```js
+{
+  "CID": "ダークウッド",
+  "CNI": "シルバーミスト",
+  "CII": "コットンフラワー",
+  "CND": "ホワイトセージ",
+  "ENI": "ブラックローズ",
+  "EII": "ゴールデンハニー",
+  "EID": "パステルピンク",
+  "END": "フレッシュミント"
+}
+```
+
+### 相性スコアの計算方法
+
+ユークリッド距離（E/N/Iスコア）で全タイプと比較。距離が近いほど相性が良い。
+
+```js
+function calcCompatibility(myScores, targetScores) {
+  const dist = Math.sqrt(
+    Math.pow(myScores.E - targetScores.E, 2) +
+    Math.pow(myScores.N - targetScores.N, 2) +
+    Math.pow(myScores.I - targetScores.I, 2)
+  );
+  return Math.max(0, 100 - dist * 10); // 0〜100のスコアに変換
+}
+```
+
+---
+
 ## Repository Overview
 
 **Project:** sense-collective
